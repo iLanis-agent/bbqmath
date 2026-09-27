@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BBQMath - honest low-and-slow math</title>
+<style>
+  :root { --bg:#171110; --card:#241713; --line:#422a1e; --ink:#f2e4da; --dim:#b3937f; --fire:#e0663a; --warn:#e0a04a; --ok:#8fbf6a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width:920px; margin:0 auto; padding:28px 20px 80px; }
+  h1 { font-size:30px; margin:6px 0 0; } h1 span { color:var(--fire); }
+  nav { text-align:right; } nav a { color:var(--dim); text-decoration:none; font-size:14px; }
+  nav a:hover { color:var(--fire); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin-top:22px; }
+  .card h2 { margin:0 0 14px; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); font-weight:600; }
+  .row { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
+  label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
+  input, select { background:#1a1210; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:9px 10px; font-size:15px; width:110px; }
+  select { width:auto; min-width:150px; }
+  .presets { margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; }
+  .presets button { background:#2c1c14; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:14px; cursor:pointer; }
+  .presets button:hover { border-color:var(--fire); }
+  .stat { display:inline-block; background:#1a1210; border:1px solid var(--line); border-radius:10px; padding:12px 18px; margin:0 10px 10px 0; min-width:130px; }
+  .stat b { display:block; font-size:24px; color:var(--fire); }
+  .stat small { color:var(--dim); font-size:12px; }
+  .verdict { font-size:17px; margin:2px 0 14px; }
+  .verdict b { color:var(--fire); }
+  .fix { background:#2c1a10; border:1px solid #4f3018; border-radius:10px; padding:12px 16px; margin-top:8px; font-size:15px; }
+  .fix.ok { background:#1c2415; border-color:#3a4a28; }
+  .fix.warn { background:#2c1410; border-color:#5c2b20; }
+  .note { color:var(--dim); font-size:13px; margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a href="index.html">about</a></nav>
+  <h1>BBQ<span>Math</span></h1>
+  <div class="note" style="font-size:14px;">The meat loses a third of itself, the stall steals your afternoon, and dinner is a start time you compute backwards.</div>
+
+  <div class="card">
+    <h2>The cook</h2>
+    <div class="row">
+      <div><label>Meat</label><select id="meat"><option value="brisket" selected>Brisket (whole packer)</option><option value="butt">Pork butt</option><option value="ribs-baby">Baby back ribs</option><option value="ribs-spare">Spare ribs</option></select></div>
+      <div><label>Weight (lb)</label><input id="lb" type="number" min="2" max="20" step="0.5" value="12"></div>
+      <div><label>Grate temp (F)</label><select id="temp"><option value="225" selected>225</option><option value="250">250</option><option value="275">275</option></select></div>
+      <div><label>Cooker</label><select id="cooker"><option value="kettle" selected>Kettle / WSM</option><option value="kamado">Kamado</option><option value="offset">Offset stick burner</option></select></div>
+    </div>
+    <div class="presets" id="presets"></div>
+    <div id="cook"></div>
+  </div>
+
+  <div class="card">
+    <h2>The timeline</h2>
+    <div class="row">
+      <div><label>Serve at (hour, 24h)</label><input id="serve" type="number" min="0" max="23" step="1" value="18"></div>
+      <div><label>Rest (h)</label><input id="rest" type="number" min="0" max="4" step="0.5" value="2"></div>
+    </div>
+    <div id="timeline"></div>
+  </div>
+
+  <div class="card">
+    <h2>The guests</h2>
+    <div class="row">
+      <div><label>Guests</label><input id="guests" type="number" min="1" max="60" step="1" value="10"></div>
+      <div><label>Cooked lb per person</label><select id="per"><option value="0.5" selected>0.5 - normal</option><option value="0.75">0.75 - hungry</option><option value="0.33">0.33 - sandwich sliders</option></select></div>
+    </div>
+    <div id="guestsOut"></div>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script>
+var $ = function(id){ return document.getElementById(id); };
+var PRESETS = {
+  'Saturday brisket, 12lb': { meat:'brisket', lb:12, temp:225, cooker:'kettle', serve:18, guests:10 },
+  'Overnight butt, 9lb': { meat:'butt', lb:9, temp:225, cooker:'kamado', serve:17, guests:12 },
+  'Hot-and-fast brisket': { meat:'brisket', lb:10, temp:275, cooker:'offset', serve:18, guests:12 },
+  'Rib lunch': { meat:'ribs-baby', lb:3, temp:225, cooker:'kettle', serve:12, guests:4 }
+};
+var pb = $('presets');
+Object.keys(PRESETS).forEach(function(name){
+  var b = document.createElement('button'); b.textContent = name;
+  b.onclick = function(){ var p = PRESETS[name];
+    ['meat','lb','temp','cooker','serve','guests'].forEach(function(k){ $(k).value = p[k]; }); render(); };
+  pb.appendChild(b);
+});
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function hh(h){ var hh2 = Math.floor(h) % 24; var mm = Math.round((h - Math.floor(h)) * 60); return ('0' + hh2).slice(-2) + ':' + ('0' + mm).slice(-2); }
+
+function render(){
+  var meat = $('meat').value, lb = parseFloat($('lb').value), temp = parseInt($('temp').value);
+  var cooker = $('cooker').value, serve = parseInt($('serve').value), rest = parseFloat($('rest').value);
+  var isRibs = meat.indexOf('ribs') === 0;
+  var cook = BBQEngine.cookHours(meat, lb, temp);
+  var fuel = BBQEngine.fuelLb(cook, cooker);
+  var name = { brisket:'brisket', butt:'pork butt', 'ribs-baby':'baby backs', 'ribs-spare':'spare ribs' }[meat];
+
+  var d = BBQEngine.doneness(meat);
+  var targetHtml = d
+    ? '<span class="stat"><b>' + d.pull + 'F</b><small>pull temperature</small></span>'
+    : '<span class="stat"><b>bend test</b><small>doneness - they crack, not temp</small></span>';
+  var yieldHtml = isRibs
+    ? '<div class="note">Ribs go by rack and by time, not by weight - the ' + lb + ' lb on the label changes nothing but the bill.</div>'
+    : '<span class="stat"><b>' + (BBQEngine.yieldPct(meat) * 100) + '%</b><small>cooked yield after trim + cook</small></span>';
+
+  $('cook').innerHTML =
+    '<div class="verdict">A ' + (isRibs ? '' : lb + ' lb ') + name + ' at <b>' + temp + 'F</b> takes about <b>' + cook + ' hours</b>' + (isRibs ? '' : ' - and that is the average, not the promise') + '.</div>' +
+    '<span class="stat"><b>' + cook + ' h</b><small>estimated cook</small></span>' +
+    targetHtml +
+    '<span class="stat"><b>' + fuel + ' lb</b><small>charcoal on a ' + cooker + '</small></span>' +
+    yieldHtml +
+    '<div class="fix warn">' + esc(BBQEngine.stallNote()) + '</div>' +
+    (d ? '<div class="note">' + esc(d.note) + '</div>' : '');
+
+  var tl = BBQEngine.serveTimeline(serve, cook, rest, 1);
+  var rv = BBQEngine.restVerdict(rest);
+  $('timeline').innerHTML =
+    '<div class="verdict">Serving at <b>' + hh(serve) + '</b> means fire at <b>' + hh(tl.fireHour) + (tl.dayBefore ? ' the day before' : '') + '</b> - ' + tl.totalHours + ' hours door to door.</div>' +
+    '<span class="stat"><b>' + hh(tl.fireHour) + '</b><small>light the fire' + (tl.dayBefore ? ' (day before)' : '') + '</small></span>' +
+    '<span class="stat"><b>' + cook + ' h</b><small>cook</small></span>' +
+    '<span class="stat"><b>' + rest + ' h</b><small>rest</small></span>' +
+    '<span class="stat"><b>1 h</b><small>buffer (there is always something)</small></span>' +
+    '<div class="fix' + (rest < 1 ? ' warn' : ' ok') + '">' + esc(rv) + '</div>' +
+    '<div class="note">The buffer is not pessimism, it is brisket. Meat finishes when it finishes; the cooler hold absorbs the difference, guests absorb nothing.</div>';
+
+  var guests = parseInt($('guests').value), per = parseFloat($('per').value);
+  if (!isRibs && guests > 0) {
+    var raw = BBQEngine.rawForGuests(guests, meat, per);
+    var serves = BBQEngine.servings(lb, meat, per);
+    var short = serves < guests;
+    $('guestsOut').innerHTML =
+      '<div class="verdict">' + guests + ' guests at ' + per + ' lb cooked each means buying <b>' + raw + ' lb raw</b>; your ' + lb + ' lb ' + name + ' feeds <b>' + serves + '</b>.</div>' +
+      '<span class="stat"><b>' + raw + ' lb</b><small>raw to buy for ' + guests + '</small></span>' +
+      '<span class="stat"><b>' + serves + '</b><small>fed by your ' + lb + ' lb</small></span>' +
+      (short ? '<div class="fix warn">Your ' + lb + ' lb ' + name + ' comes up ' + (guests - serves) + ' servings short - buy ' + raw + ' lb or expect the last guests to get beans.</div>'
+             : '<div class="fix ok">Covered - leftovers are a feature, not a bug. Cooked ' + name + ' freezes fine.</div>') +
+      '<div class="note">Yield is the number everyone gets wrong: a ' + name + ' keeps about ' + (BBQEngine.yieldPct(meat) * 100) + '% of its raw weight after trimming and rendering. The 12-pounder you carried home is a ' + Math.round(lb * BBQEngine.yieldPct(meat) * 10) / 10 + ' lb dinner.</div>';
+  } else if (isRibs) {
+    $('guestsOut').innerHTML = '<div class="note">Ribs: figure half a rack of baby backs per person, a third of a rack of spares - bone is not dinner.</div>';
+  } else {
+    $('guestsOut').innerHTML = '<div class="note">Enter guest count.</div>';
+  }
+}
+['meat','lb','temp','cooker','serve','rest','guests','per'].forEach(function(id){ $(id).addEventListener('input', render); });
+render();
+</script>
+</body>
+</html>
